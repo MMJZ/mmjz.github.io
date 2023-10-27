@@ -1,0 +1,218 @@
+<html>
+
+<head>
+  <link rel="stylesheet" href="css/live.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>quicklive</title>
+</head>
+
+<body>
+  <h1 id="b1"></h1>
+  <table id="table"></table>
+  <flex-spacer></flex-spacer>
+  <footer><img src="img/NRE.png"></footer>
+
+  <script>
+    const london = [{
+        "stationName": "London Blackfriars",
+        "crsCode": "BFR"
+      },
+      {
+        "stationName": "London Cannon Street",
+        "crsCode": "CST"
+      },
+      {
+        "stationName": "London Charing Cross",
+        "crsCode": "CHX"
+      },
+      {
+        "stationName": "City Thameslink",
+        "crsCode": "CTX"
+      },
+      {
+        "stationName": "London Euston",
+        "crsCode": "EUS"
+      },
+      {
+        "stationName": "London Fenchurch Street",
+        "crsCode": "FST"
+      },
+      {
+        "stationName": "London Kings Cross",
+        "crsCode": "KGX"
+      },
+      {
+        "stationName": "London Liverpool Street",
+        "crsCode": "LST"
+      },
+      {
+        "stationName": "London Bridge",
+        "crsCode": "LBG"
+      },
+      {
+        "stationName": "London Marylebone",
+        "crsCode": "MYB"
+      },
+      {
+        "stationName": "Moorgate",
+        "crsCode": "MOG"
+      },
+      {
+        "stationName": "Old Street",
+        "crsCode": "OLD"
+      },
+      {
+        "stationName": "London Paddington",
+        "crsCode": "PAD"
+      },
+      {
+        "stationName": "London St Pancras International",
+        "crsCode": "STP"
+      },
+      {
+        "stationName": "Vauxhall",
+        "crsCode": "VXH"
+      },
+      {
+        "stationName": "London Victoria",
+        "crsCode": "VIC"
+      },
+      {
+        "stationName": "London Waterloo",
+        "crsCode": "WAT"
+      },
+      {
+        "stationName": "London Waterloo East",
+        "crsCode": "WAE"
+      }
+    ];
+
+
+
+    const crs = window.location.href.split("?")[1];
+    if (crs == null) {
+      alert("woo");
+    }
+
+    const r = new XMLHttpRequest();
+    r.open("GET", `https://michaelagius.uk/darwin/GetDepartureBoard/${crs}`, true);
+    // r.open("GET", `https://lite.realtime.nationalrail.co.uk/OpenLDBWS/api/20220120/GetDepartureBoard/${crs}`, true);
+    r.setRequestHeader('Authorization', 'Basic ' + btoa('MMJZ:114c5b21-6c0c-4d24-861f-6ab244a873dc'));
+    r.withCredentials = true;
+    r.onreadystatechange = function() {
+      if (r.readyState != 4 || r.status != 200) return;
+      const resp = JSON.parse(r.response);
+
+      let callbacks = 0;
+      let blocks = [];
+
+      for (const train of resp.trainServices) {
+        callbacks += 1;
+        const hloc = train.locationName;
+        let htime = formatTime(train.etd, train.std);
+        let delayed = train.etd !== "On time";
+
+        const serviceID = train.serviceID;
+
+        const sr = new XMLHttpRequest();
+        sr.open("GET", `https://michaelagius.uk/darwin/GetServiceDetails/${serviceID}`, true);
+        // sr.open("GET", `https://lite.realtime.nationalrail.co.uk/OpenLDBWS/api/20220120/GetServiceDetails/${serviceID}`, true);
+        sr.setRequestHeader('Authorization', 'Basic ' + btoa('MMJZ:114c5b21-6c0c-4d24-861f-6ab244a873dc'));
+        sr.withCredentials = true;
+        sr.onreadystatechange = function() {
+          if (sr.readyState != 4 || sr.status != 200) return;
+          const sresp = JSON.parse(sr.response);
+          const origc = sresp.previousCallingPoints;
+          let origt, origdelayed;
+          if (origc === null) {
+            origt = htime;
+            origdelayed = delayed;
+          } else {
+            const orig = origc[0].callingPoint[0];
+            origt = formatTime(orig.et, orig.st);
+            origdelayed = orig.et !== "On time";
+          }
+          const destc = sresp.subsequentCallingPoints;
+          let destt, destdelayed;
+          if (destc === null) {
+            destt = htime;
+            destdelayed = delayed;
+          } else {
+            const dest = destc[0].callingPoint[destc[0].callingPoint.length - 1];
+            destt = formatTime(dest.et, dest.st);
+            destdelayed = dest.et !== "On time";
+          }
+          blocks.push({
+            html: makeRow(
+              origt,
+              origdelayed,
+              train.origin[0].locationName,
+              htime,
+              delayed,
+              train.destination[0].locationName,
+              destt,
+              destdelayed),
+            t: htime
+          });
+
+          callbacks -= 1;
+          if (callbacks === 0) displayRes(blocks);
+        };
+        sr.send();
+      }
+      document.getElementById("b1").innerHTML = resp.locationName;
+    };
+    r.send();
+
+
+    function displayRes(blocks) {
+      blocks.sort((a, b) => {
+        if (a.t < b.t) return -1;
+        if (a.t > b.t) return 1;
+        return 0;
+      });
+      const tab = document.getElementById("table");
+      for (let b of blocks) tab.innerHTML += b.html;
+      let e = false;
+//      for (const t of tab.getElementsByTagName("tr")) {
+//        t.className += e ? " tle" : " tlo";
+//        e = !e;
+//      }
+    }
+
+    function formatTime(et, st) {
+      if (et === "On time") return st;
+      if (et == null) return "Off";
+      if (et === "Cancelled") return "C";
+      if (et === "Delayed") return "D";
+      return et;
+    }
+
+
+    function makeRow(ot, otd, from, ht, htd, to, dt, dtd) {
+      let delon = false;
+      for (const s of london)
+        if (s.stationName === from) {
+          delon = true;
+          break;
+        }
+      if(from.startsWith("London ") && !from.startsWith("London Brid")){
+        from = from.substring(7);
+      }
+      if(to.startsWith("London ") && !to.startsWith("London Brid")){
+        to = to.substring(7);
+      }
+      return `
+<tr class="${delon ? "lon" : ""}">
+<td class="ot${otd ? " del" : ""}">${ot}</td>
+<td class="from">${from}</td>
+<td class="ht${htd ? " del" : ""}">${ht}</td>
+<td class="to">${to}</td>
+<td class="dt${dtd ? " del" : ""}">${dt}</td>
+</tr>
+`;
+    }
+  </script>
+</body>
+
+</html>
