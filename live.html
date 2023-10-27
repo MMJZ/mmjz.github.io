@@ -124,7 +124,7 @@
           const sresp = JSON.parse(sr.response);
           const origc = sresp.previousCallingPoints;
           let origt, origdelayed;
-          if (origc === null) {
+          if (origc == null) {
             origt = htime;
             origdelayed = delayed;
           } else {
@@ -134,7 +134,7 @@
           }
           const destc = sresp.subsequentCallingPoints;
           let destt, destdelayed;
-          if (destc === null) {
+          if (destc == null) {
             destt = htime;
             destdelayed = delayed;
           } else {
